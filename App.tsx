@@ -4,24 +4,28 @@ import { User, Booking, Role, Shift, Vacation, VacationStatus, BookingStatus, No
 import LoginView from './components/LoginView';
 import CalendarView from './components/CalendarView';
 
-// Allow using the global firebase object from the script tag
+// Allow using the global firebase object from the script tag in index.html
 declare var firebase: any;
 
-// --- FIREBASE INITIALIZATION ---
-// TODO: Replace with your project's Firebase credentials
+// --- Firebase Configuration ---
+// This configuration is loaded by the script tags in index.html
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyC6yDbJ-jZN1cYgaVpVDZy17yF4Abz9WTY",
+  authDomain: "agenda-de-turnos---matehost.firebaseapp.com",
+  projectId: "agenda-de-turnos---matehost",
+  storageBucket: "agenda-de-turnos---matehost.firebasestorage.app",
+  messagingSenderId: "1032623984553",
+  appId: "1:1032623984553:web:942cd1a6d559261e1abeb8",
+  measurementId: "G-80F58KNNCC"
 };
 
-// Initialize Firebase
+// Initialize Firebase using the global object from the script tag
+// This check prevents re-initializing the app on every hot-reload.
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
+
+// Get Firebase services using the v8 SDK syntax
 const auth = firebase.auth();
 const db = firebase.firestore();
 
@@ -74,13 +78,11 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribeAuth = auth.onAuthStateChanged(async (userAuth) => {
+        const unsubscribeAuth = auth.onAuthStateChanged(async (userAuth: any) => {
             if (userAuth) {
                 const userDoc = await db.collection('users').doc(userAuth.uid).get();
                 if (userDoc.exists) {
                     setCurrentUser({ id: userDoc.id, ...userDoc.data() } as User);
-                } else {
-                    setCurrentUser(null);
                 }
             } else {
                 setCurrentUser(null);
@@ -89,14 +91,21 @@ const App: React.FC = () => {
         });
 
         const unsubscribes: (() => void)[] = [];
-        if (currentUser) {
-            const collections = ['users', 'bookings', 'shifts', 'vacations', 'notifications', 'shiftSwaps'];
-            const setters: any = { users: setUsers, bookings: setBookings, shifts: setShifts, vacations: setVacations, notifications: setNotifications, shiftSwaps: setShiftSwaps };
+        // Only subscribe to Firestore collections if a user is logged in
+        if (currentUser && currentUser.id) {
+            const collections: { name: string; setter: React.Dispatch<React.SetStateAction<any[]>> }[] = [
+                { name: 'users', setter: setUsers },
+                { name: 'bookings', setter: setBookings },
+                { name: 'shifts', setter: setShifts },
+                { name: 'vacations', setter: setVacations },
+                { name: 'notifications', setter: setNotifications },
+                { name: 'shiftSwaps', setter: setShiftSwaps },
+            ];
 
             collections.forEach(collection => {
-                const unsubscribe = db.collection(collection).onSnapshot(snapshot => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setters[collection](data);
+                const unsubscribe = db.collection(collection.name).onSnapshot((snapshot: any) => {
+                    const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                    collection.setter(data);
                 });
                 unsubscribes.push(unsubscribe);
             });
@@ -106,7 +115,7 @@ const App: React.FC = () => {
             unsubscribeAuth();
             unsubscribes.forEach(unsub => unsub());
         };
-    }, [currentUser?.id]);
+    }, [currentUser?.id]); // Rerun effect when currentUser.id changes (login/logout)
     
     // --- CONTEXT FUNCTIONS ---
     const login = async (email: string, password: string) => {
@@ -147,9 +156,47 @@ const App: React.FC = () => {
     };
 
     const addUser = async (data: Omit<User, 'id'> & { password_NOT_SAVED: string, vacationApproverId?: string }) => {
-       // Note: In a real app, user creation would be handled by a secure backend function.
-       // This is a simplified client-side version for demonstration.
-       alert("La creación de usuarios debe ser manejada por un administrador desde una función de backend segura por razones de seguridad. Esta función está deshabilitada en este ejemplo.");
+       // ADVERTENCIA: Esta es una implementación del lado del cliente solo para demostración.
+       // La creación de usuarios en nombre de otros en el cliente NO es segura.
+       // En una aplicación de producción, esto DEBE ser manejado por un entorno de backend seguro
+       // (como Firebase Cloud Functions) para evitar exponer la lógica de creación de usuarios y
+       // para gestionar los permisos correctamente.
+       
+       // Se crea una instancia de app de Firebase secundaria y temporal para crear el usuario.
+       // Esto evita que el administrador actual cierre la sesión.
+       const secondaryAppName = `secondary-app-${Date.now()}`;
+       const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryAppName);
+       
+       try {
+        const userCredential = await secondaryApp.auth().createUserWithEmailAndPassword(data.email, data.password_NOT_SAVED);
+        const newId = userCredential.user.uid;
+
+        let approverId = data.vacationApproverId;
+        if (approverId === 'self' || !approverId) {
+            approverId = newId;
+        }
+
+        const newUser: Omit<User, 'id'> = {
+            username: data.username,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            role: data.role,
+            vacationApproverId: approverId
+        };
+        
+        // Se usa la instancia principal de la BD para crear el documento en Firestore.
+        await db.collection('users').doc(newId).set(newUser);
+       } catch(error) {
+           console.error("Error creating user:", error);
+           if (error instanceof Error) {
+               throw new Error(`Error al crear usuario: ${error.message}`);
+           }
+           throw new Error("Ocurrió un error desconocido al crear el usuario.");
+       } finally {
+           // Se limpia la instancia de la app secundaria.
+           await secondaryApp.delete();
+       }
     };
 
     const updateUser = async (updatedUser: User) => {
@@ -158,7 +205,12 @@ const App: React.FC = () => {
     };
     
     const deleteUser = async (userId: string) => {
-       alert("La eliminación de usuarios debe ser manejada por un administrador desde una función de backend segura para garantizar la integridad de los datos (ej: reasignar turnos).");
+       // ADVERTENCIA: Esto solo elimina los datos del usuario de Firestore.
+       // NO elimina al usuario de Firebase Authentication.
+       // Eliminar un usuario de autenticación requiere el SDK de Admin en un entorno de backend seguro
+       // (como Firebase Cloud Functions).
+       // Después de ejecutar esto, debe eliminar manualmente al usuario desde la Consola de Firebase.
+       await db.collection('users').doc(userId).delete();
     };
 
     const addBooking = async (booking: Omit<Booking, 'id'>) => {
@@ -199,7 +251,7 @@ const App: React.FC = () => {
     const markNotificationsAsSeen = async (userId: string) => {
         const unseenNotifs = await db.collection('notifications').where('userId', '==', userId).where('seen', '==', false).get();
         const batch = db.batch();
-        unseenNotifs.docs.forEach(doc => {
+        unseenNotifs.docs.forEach((doc: any) => {
             batch.update(doc.ref, { seen: true });
         });
         await batch.commit();
@@ -228,7 +280,7 @@ const App: React.FC = () => {
             const requesterBookingRef = db.collection('bookings').doc(updatedSwap.requesterBookingId);
             const requestedBookingRef = db.collection('bookings').doc(updatedSwap.requestedBookingId);
             
-            await db.runTransaction(async (transaction) => {
+            await db.runTransaction(async (transaction: any) => {
                 const reqBookingDoc = await transaction.get(requesterBookingRef);
                 const requestedBookingDoc = await transaction.get(requestedBookingRef);
                 if (!reqBookingDoc.exists || !requestedBookingDoc.exists) { throw "Booking not found!"; }
