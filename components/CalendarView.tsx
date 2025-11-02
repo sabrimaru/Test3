@@ -11,7 +11,6 @@ import NewsModal from './NewsModal';
 import EventDetailModal from './EventDetailModal';
 import NotificationsHistoryModal from './NotificationsHistoryModal';
 import ShiftSwapModal from './ShiftSwapModal';
-import EmailSummaryModal from './EmailSummaryModal';
 import { ChevronLeftIcon, ChevronRightIcon, CogIcon, LogoutIcon, BellIcon, CheckIcon, XIcon, ChevronDownIcon, CalendarIcon, SunIcon, DownloadIcon, NewspaperIcon } from './Icons';
 
 type CalendarViewType = 'month' | 'week' | 'day' | 'agenda';
@@ -42,7 +41,11 @@ const ApprovalsDropdown: React.FC<{
 }> = ({ pendingBookings, pendingDeletions, pendingVacations, pendingSwaps, users, bookings, onApproveBooking, onRejectBooking, onConfirmDelete, onRejectDelete, onApproveVacation, onRejectVacation, onApproveSwap, onRejectSwap }) => {
     
     const allPending = [...pendingBookings, ...pendingDeletions, ...pendingVacations, ...pendingSwaps];
-    allPending.sort((a, b) => new Date('createdAt' in a ? a.createdAt : (a as any).date).getTime() - new Date('createdAt' in b ? b.createdAt : (b as any).date).getTime());
+    allPending.sort((a, b) => {
+        const dateA = 'createdAt' in a ? a.createdAt : ('date' in a ? a.date : a.startDate);
+        const dateB = 'createdAt' in b ? b.createdAt : ('date' in b ? b.date : b.startDate);
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
 
 
     const getRequestContent = (item: Booking | Vacation | ShiftSwapRequest) => {
@@ -107,7 +110,6 @@ const CalendarView: React.FC = () => {
     const [isEventDetailModalOpen, setEventDetailModalOpen] = useState(false);
     const [isNotificationsHistoryModalOpen, setNotificationsHistoryModalOpen] = useState(false);
     const [isShiftSwapModalOpen, setShiftSwapModalOpen] = useState(false);
-    const [isEmailSummaryModalOpen, setEmailSummaryModalOpen] = useState(false);
     
     // Dropdown states
     const [isApprovalsOpen, setApprovalsOpen] = useState(false);
@@ -247,13 +249,13 @@ const CalendarView: React.FC = () => {
         setShiftSwapModalOpen(true);
     };
     
-    const handleLogout = () => {
+    const handleLogout = async () => {
         if (canManageSettings && totalPending > 0) {
             if (!window.confirm('Hay solicitudes pendientes. ¿Está seguro de que desea salir?')) {
                 return;
             }
         }
-        logout();
+        await logout();
     };
 
     const isToday = (date: Date) => {
@@ -418,13 +420,12 @@ const CalendarView: React.FC = () => {
 
             {isEventDetailModalOpen && <EventDetailModal isOpen={isEventDetailModalOpen} onClose={() => setEventDetailModalOpen(false)} event={selectedEvent} onEdit={handleEditEvent} onSwap={handleSwapEvent} />}
             {isBookingModalOpen && <BookingModal isOpen={isBookingModalOpen} onClose={() => setBookingModalOpen(false)} date={selectedDateForBooking} bookingToEdit={editingBooking}/>}
-            {isSettingsModalOpen && <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setSettingsModalOpen(false)} onOpenEmailSummary={() => setEmailSummaryModalOpen(true)} />}
+            {isSettingsModalOpen && <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setSettingsModalOpen(false)} />}
             {isVacationModalOpen && <VacationModal isOpen={isVacationModalOpen} onClose={() => { setVacationModalOpen(false); setEditingVacation(null); }} vacationToEdit={editingVacation} />}
             {isExportModalOpen && <ExportModal isOpen={isExportModalOpen} onClose={() => setExportModalOpen(false)} />}
             {isNewsModalOpen && <NewsModal isOpen={isNewsModalOpen} onClose={handleCloseNewsModal} notifications={unseenNotificationsRef.current} />}
             {isNotificationsHistoryModalOpen && <NotificationsHistoryModal isOpen={isNotificationsHistoryModalOpen} onClose={() => setNotificationsHistoryModalOpen(false)} />}
             {isShiftSwapModalOpen && <ShiftSwapModal isOpen={isShiftSwapModalOpen} onClose={() => setShiftSwapModalOpen(false)} bookingToSwap={bookingToSwap} />}
-            {isEmailSummaryModalOpen && <EmailSummaryModal isOpen={isEmailSummaryModalOpen} onClose={() => setEmailSummaryModalOpen(false)} />}
         </div>
     );
 };

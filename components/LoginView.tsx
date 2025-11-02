@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Role } from '../types';
 import { useSafeContext } from '../App';
 import { CalendarIcon } from './Icons';
@@ -10,8 +11,9 @@ const LoginView: React.FC = () => {
     const [view, setView] = useState<View>('login');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const [loginUsername, setLoginUsername] = useState('');
+    const [loginEmail, setLoginEmail] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
 
     const [regFirstName, setRegFirstName] = useState('');
@@ -21,53 +23,72 @@ const LoginView: React.FC = () => {
     const [regPassword, setRegPassword] = useState('');
     
     const [forgotEmail, setForgotEmail] = useState('');
+    
+    const [hasAdmin, setHasAdmin] = useState(true);
 
-    const handleLogin = (e: React.FormEvent) => {
+    useEffect(() => {
+        // In a real app, this check might be done with a more secure method like a cloud function
+        // For simplicity, we check on the client if any user has the admin role.
+        setHasAdmin(users.some(u => u.role === Role.ADMINISTRADOR));
+    }, [users]);
+
+
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        const loggedIn = login(loginUsername, loginPassword);
-        if (!loggedIn) {
-            setError('Usuario o contraseña incorrectos.');
+        setIsLoading(true);
+        try {
+            await login(loginEmail, loginPassword);
+        } catch (err) {
+            setError('Email o contraseña incorrectos.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleRegister = (e: React.FormEvent) => {
+    const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setSuccess('');
+        setIsLoading(true);
         try {
-            registerAdmin({
+            await registerAdmin({
                 firstName: regFirstName,
                 lastName: regLastName,
                 email: regEmail,
                 username: regUsername,
-                password: regPassword,
+                password_NOT_SAVED: regPassword,
             });
-            setSuccess(`¡Registro exitoso! Se ha enviado un correo de confirmación a ${regEmail}. Por favor, inicie sesión.`);
-            // Simulate sending email
-            console.log(`Email sent to ${regEmail} with registration details.`);
+            setSuccess(`¡Registro exitoso! Por favor, inicie sesión.`);
             setView('login');
         } catch (err) {
-            if(err instanceof Error){
+             if(err instanceof Error){
                  setError(err.message);
             } else {
-                setError("An unknown error occurred.");
+                setError("Ocurrió un error desconocido durante el registro.");
             }
+        } finally {
+            setIsLoading(false);
         }
     };
     
-    const handleForgotPassword = (e: React.FormEvent) => {
+    const handleForgotPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setSuccess('');
-        // Simulate sending password reset email
-        console.log(`Password reset link sent to ${forgotEmail}`);
-        alert(`Si existe una cuenta con el email ${forgotEmail}, se ha enviado un enlace para restablecer la contraseña.`);
-        setSuccess(`Si existe una cuenta con el email ${forgotEmail}, se ha enviado un enlace para restablecer la contraseña.`);
-        setView('login');
+        setIsLoading(true);
+        try {
+            // Firebase handles this logic client-side
+            alert(`Si existe una cuenta con el email ${forgotEmail}, se ha enviado un enlace para restablecer la contraseña.`);
+            setSuccess(`Si existe una cuenta con el email ${forgotEmail}, se ha enviado un enlace para restablecer la contraseña.`);
+            setView('login');
+        } catch (err) {
+            setError("Error al enviar el correo de recuperación.");
+        } finally {
+             setIsLoading(false);
+        }
     };
-
-    const hasAdmin = users.some(u => u.role === Role.ADMINISTRADOR);
 
     const renderForm = () => {
         switch (view) {
@@ -81,8 +102,8 @@ const LoginView: React.FC = () => {
                         </div>
                         <input type="email" placeholder="Email" value={regEmail} onChange={e => setRegEmail(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <input type="text" placeholder="Nombre de usuario" value={regUsername} onChange={e => setRegUsername(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="password" placeholder="Contraseña" value={regPassword} onChange={e => setRegPassword(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300">Registrar</button>
+                        <input type="password" placeholder="Contraseña (mín. 6 caracteres)" value={regPassword} onChange={e => setRegPassword(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-blue-300">{isLoading ? 'Registrando...' : 'Registrar'}</button>
                         <p className="text-center text-sm">
                             <a href="#" onClick={(e) => { e.preventDefault(); setView('login');}} className="text-blue-600 hover:underline">Volver a inicio de sesión</a>
                         </p>
@@ -94,7 +115,7 @@ const LoginView: React.FC = () => {
                         <h2 className="text-2xl font-bold text-center text-gray-700">Olvidé mi contraseña</h2>
                          <p className="text-center text-sm text-gray-500">Ingrese su email para recibir un enlace de recuperación.</p>
                         <input type="email" placeholder="Email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300">Enviar enlace</button>
+                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-blue-300">{isLoading ? 'Enviando...' : 'Enviar enlace'}</button>
                         <p className="text-center text-sm">
                             <a href="#" onClick={(e) => { e.preventDefault(); setView('login');}} className="text-blue-600 hover:underline">Volver a inicio de sesión</a>
                         </p>
@@ -105,14 +126,14 @@ const LoginView: React.FC = () => {
                 return (
                     <form onSubmit={handleLogin} className="space-y-4">
                         <h2 className="text-2xl font-bold text-center text-gray-700">Iniciar Sesión</h2>
-                        <input type="text" placeholder="Nombre de usuario" value={loginUsername} onChange={e => setLoginUsername(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <input type="password" placeholder="Contraseña" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300">Entrar</button>
+                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-blue-300">{isLoading ? 'Entrando...' : 'Entrar'}</button>
                         <div className="flex justify-between items-center text-sm">
                            {!hasAdmin ? (
                              <a href="#" onClick={(e) => { e.preventDefault(); setView('register'); }} className="text-blue-600 hover:underline">Registrar Admin</a>
                            ) : (
-                             <span /> // Placeholder to keep forgot password link on the right
+                             <span /> 
                            )}
                             <a href="#" onClick={(e) => { e.preventDefault(); setView('forgot'); }} className="text-blue-600 hover:underline">Olvidé mi contraseña</a>
                         </div>

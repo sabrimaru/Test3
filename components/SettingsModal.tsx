@@ -11,7 +11,7 @@ interface UserFormData {
     firstName: string;
     lastName: string;
     email: string;
-    password: string;
+    password_NOT_SAVED: string;
     role: Role;
     vacationApproverId: string;
 }
@@ -50,8 +50,8 @@ const UserForm: React.FC<UserFormProps> = ({
                     <input type="text" name="username" placeholder="Nombre de usuario" value={formData.username} onChange={handleChange} required className="w-full p-2 border rounded" />
                     <input type="text" name="firstName" placeholder="Nombre" value={formData.firstName} onChange={handleChange} required className="w-full p-2 border rounded" />
                     <input type="text" name="lastName" placeholder="Apellido" value={formData.lastName} onChange={handleChange} required className="w-full p-2 border rounded" />
-                    <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required className="w-full p-2 border rounded" />
-                    <input type="password" name="password" placeholder={editingUser ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña'} value={formData.password} onChange={handleChange} className="w-full p-2 border rounded" />
+                    <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required className="w-full p-2 border rounded" readOnly={!!editingUser} />
+                    <input type="password" name="password_NOT_SAVED" placeholder={editingUser ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña'} value={formData.password_NOT_SAVED} onChange={handleChange} className="w-full p-2 border rounded" />
                     <select name="role" value={formData.role} onChange={handleChange} required className="w-full p-2 border rounded">
                         {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
@@ -143,13 +143,12 @@ const ShiftForm: React.FC<ShiftFormProps> = ({
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onOpenEmailSummary: () => void;
 }
 
-const INITIAL_USER_FORM_STATE: UserFormData = { username: '', firstName: '', lastName: '', email: '', password: '', role: Role.MATEHOST, vacationApproverId: 'self' };
+const INITIAL_USER_FORM_STATE: UserFormData = { username: '', firstName: '', lastName: '', email: '', password_NOT_SAVED: '', role: Role.MATEHOST, vacationApproverId: 'self' };
 const INITIAL_SHIFT_FORM_STATE: ShiftFormData = { name: '', startTime: '08:00', endTime: '16:00' };
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEmailSummary }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const { users, addUser, updateUser, deleteUser, currentUser, shifts, addShift, updateShift, deleteShift } = useSafeContext();
     const [activeTab, setActiveTab] = useState('users');
     const [formError, setFormError] = useState('');
@@ -181,7 +180,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
             firstName: user.firstName, 
             lastName: user.lastName, 
             email: user.email, 
-            password: '', 
+            password_NOT_SAVED: '', 
             role: user.role,
             vacationApproverId: user.vacationApproverId || 'self'
         });
@@ -189,26 +188,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
         setIsUserFormOpen(true);
     };
 
-    const handleUserFormSubmit = (e: React.FormEvent) => {
+    const handleUserFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError('');
-        const { password } = userFormData;
+        const { password_NOT_SAVED, ...userData } = userFormData;
 
         try {
             if (editingUser) {
-                if(password && password.length < 4){ throw new Error('La contraseña debe tener al menos 4 caracteres.'); }
-                const updatedUserData: Partial<User> & { vacationApproverId?: string } = { ...userFormData };
-                if(!password) delete updatedUserData.password;
+                if(password_NOT_SAVED) { throw new Error('La actualización de contraseñas debe hacerse a través de "Olvidé mi contraseña".'); }
                 
-                // Handle self-approval case for existing user
-                if (updatedUserData.vacationApproverId === 'self') {
-                    updatedUserData.vacationApproverId = editingUser.id;
+                let approverId = userData.vacationApproverId;
+                if (approverId === 'self') {
+                    approverId = editingUser.id;
                 }
-                updateUser({ ...editingUser, ...updatedUserData });
+                
+                await updateUser({ ...editingUser, ...userData, vacationApproverId: approverId });
 
             } else {
-                if(!password || password.length < 4){ throw new Error('La contraseña es requerida y debe tener al menos 4 caracteres.'); }
-                addUser(userFormData);
+                if(!password_NOT_SAVED || password_NOT_SAVED.length < 6){ throw new Error('La contraseña es requerida y debe tener al menos 6 caracteres.'); }
+                await addUser({ ...userFormData });
             }
             setIsUserFormOpen(false);
         } catch (err) {
@@ -216,10 +214,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
         }
     };
 
-    const handleDeleteUser = (userId: string) => {
+    const handleDeleteUser = async (userId: string) => {
         if (window.confirm('¿Está seguro que desea eliminar este usuario?')) {
             if(userId === currentUser?.id) { alert("No puede eliminarse a sí mismo."); return; }
-            deleteUser(userId);
+            await deleteUser(userId);
         }
     };
 
@@ -238,7 +236,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
         setIsShiftFormOpen(true);
     };
     
-    const handleShiftFormSubmit = (e: React.FormEvent) => {
+    const handleShiftFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError('');
         const { name, startTime, endTime } = shiftFormData;
@@ -248,9 +246,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
             if (startTime >= endTime && endTime !== '00:00') throw new Error("La hora de inicio debe ser anterior a la hora de fin.");
 
             if (editingShift) {
-                updateShift({ ...editingShift, ...shiftFormData });
+                await updateShift({ ...editingShift, ...shiftFormData });
             } else {
-                addShift(shiftFormData);
+                await addShift(shiftFormData);
             }
             setIsShiftFormOpen(false);
         } catch (err) {
@@ -258,9 +256,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
         }
     };
 
-    const handleDeleteShift = (shiftId: string) => {
+    const handleDeleteShift = async (shiftId: string) => {
         if (window.confirm('¿Está seguro que desea eliminar este turno?')) {
-            deleteShift(shiftId);
+            await deleteShift(shiftId);
         }
     };
 
@@ -278,11 +276,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
                     <button onClick={() => setActiveTab('shifts')} className={`py-2 px-4 text-lg font-medium flex items-center ${activeTab === 'shifts' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
                         <ClockIcon className="h-5 w-5 mr-2" /> Gestionar Turnos
                     </button>
-                     {currentUser?.role === Role.ADMINISTRADOR && (
-                        <button onClick={() => setActiveTab('system')} className={`py-2 px-4 text-lg font-medium flex items-center ${activeTab === 'system' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
-                            <ChipIcon className="h-5 w-5 mr-2" /> Sistema
-                        </button>
-                    )}
                 </div>
 
                 <div className="flex-grow overflow-y-auto mt-4">
@@ -343,23 +336,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenEm
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
-                    )}
-                    {activeTab === 'system' && (
-                        <div className="p-4">
-                            <h3 className="text-xl font-bold mb-4">Ajustes del Sistema</h3>
-                            <p className="text-gray-600 mb-4">
-                                Aquí puede realizar acciones administrativas a nivel de sistema.
-                            </p>
-                            <button 
-                                onClick={onOpenEmailSummary} 
-                                className="py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                            >
-                                Simular Resumen Diario por Email
-                            </button>
-                            <p className="text-sm text-gray-500 mt-2">
-                                Esto abrirá una vista previa del correo de resumen de novedades que se enviaría a las 22:00hs a cada usuario con notificaciones pendientes.
-                            </p>
                         </div>
                     )}
                 </div>

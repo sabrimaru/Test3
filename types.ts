@@ -1,3 +1,4 @@
+
 export enum Role {
   MATEHOST = 'Matehost',
   ASISTENTE = 'Asistente',
@@ -5,9 +6,8 @@ export enum Role {
 }
 
 export interface User {
-  id: string;
+  id: string; // This will be the Firebase Auth UID
   username: string;
-  password: string; // NOTE: In a real app, this should be a secure hash.
   firstName: string;
   lastName: string;
   email: string;
