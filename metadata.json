@@ -1,0 +1,5 @@
+{
+  "name": "Test Matehost - Agenda de turnos",
+  "description": "Una aplicación de calendario compartido para gestionar turnos de trabajo con diferentes roles de usuario y flujos de aprobación. Creado para la gestión eficiente de equipos.",
+  "requestFramePermissions": []
+}
